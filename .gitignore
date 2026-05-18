@@ -1,0 +1,15 @@
+# Ignora i pacchetti scaricati
+elpa/
+# Ignora i file compilati generati dinamicamente
+*.elc
+config.el
+# Ignora le cartelle temporanee
+saves/
+auto-save-list/
+# Ignora file di stato
+history
+recentf
+bookmarks
+custom.el
+.smex-items
+tramp
