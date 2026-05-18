@@ -1,0 +1,245 @@
+#+TITLE: EmacsConfiguration
+#+AUTHOR: Nicolò
+#+PROPERTY: header-args:emacs-lisp :tangle yes
+
+* Setup Iniziale ed Estetica Grafica
+Interfaccia pulita stile power-user: via fronzoli, schermo vuoto all'avvio, tema scuro e icone.
+
+#+begin_src emacs-lisp
+  ;; Interfaccia minimale
+  (menu-bar-mode -1)
+  (tool-bar-mode -1)
+  (scroll-bar-mode -1)
+
+  ;; Avvio professionale a schermo vuoto
+  (setq inhibit-startup-message t)
+  (setq initial-scratch-message "")
+  (setq initial-buffer-choice t)
+
+  ;; Setup package manager
+  (unless (package-installed-p 'use-package)
+    (package-refresh-contents)
+    (package-install 'use-package))
+  (require 'use-package)
+  (setq use-package-always-ensure t)
+
+  ;; Tema scuro Doom e font Iosevka
+  (use-package doom-themes
+    :config
+    (load-theme 'doom-one t)
+    (doom-themes-visual-bell-config)
+    (doom-themes-org-config))
+
+  (when (member "Iosevka" (font-family-list))
+    (set-face-attribute 'default nil :font "Iosevka" :height 120)
+    (set-face-attribute 'variable-pitch nil :font "Iosevka" :height 120))
+
+  (when (member "Iosevka Term" (font-family-list))
+    (set-face-attribute 'fixed-pitch nil :font "Iosevka Term" :height 120))
+
+  ;; Icone universali (Richiede M-x nerd-icons-install-fonts)
+  (use-package nerd-icons
+    :custom
+    (nerd-icons-font-family "Symbols Nerd Font Mono"))
+#+end_src
+
+* Comportamento di Sistema ed Helper Visivi
+Centralizzazione dei file temporanei, tracking del cursore e scorciatoie essenziali.
+
+#+begin_src emacs-lisp
+  (setq use-short-answers t)
+  (global-auto-revert-mode 1)
+
+  ;; Isola i file temporanei (~ e #) per non sporcare le cartelle del progetto
+  (setq backup-directory-alist `(("." . ,(expand-file-name "saves/backups/" user-emacs-directory))))
+  (setq auto-save-file-name-transforms `((".*" ,(expand-file-name "saves/auto-saves/" user-emacs-directory) t)))
+  (setq create-lockfiles nil)
+
+  ;; Scorciatoia rapida per rinominare il buffer corrente (es. Vterm)
+  (global-set-key (kbd "C-c r") 'rename-buffer)
+
+  ;; Suggeritore di comandi
+  (use-package which-key
+    :init (which-key-mode)
+    :config
+    (setq which-key-idle-delay 0.5))
+
+  ;; Flash minimale sul cursore
+  (use-package beacon
+    :init
+    (beacon-mode 1)
+    :custom
+    (beacon-color "#ECBE7B")
+    (beacon-size 15)
+    (beacon-blink-delay 0.1)
+    (beacon-blink-duration 0.2)
+    (beacon-blink-when-window-scrolls t))
+#+end_src
+
+* Navigazione e Buffer Management
+Stack definitivo: Vertico (UI), Orderless (Motore di ricerca) e Consult (Comandi avanzati con segmentazione dei buffer).
+
+#+begin_src emacs-lisp
+  ;; Interfaccia verticale, ciclica e persistenza cronologia
+  (use-package vertico :init (vertico-mode 1) (setq vertico-cycle t))
+  (use-package savehist :ensure nil :init (savehist-mode 1))
+  (use-package marginalia :init (marginalia-mode 1))
+
+  ;; Motore di ricerca intelligente (ignora ordine e regex complessi)
+  (use-package orderless
+    :init
+    (setq completion-styles '(orderless basic)
+          completion-category-defaults nil
+          completion-category-overrides '((file (styles partial-completion)))))
+
+  ;; Comandi avanzati: ricerca inter-file e buffer management segmentato
+  (use-package consult
+    :bind (("C-x b" . consult-buffer)
+           ("C-s"   . consult-line)
+           ("C-c s" . consult-ripgrep))
+    :init
+    (setq isearch-invisible 'open)
+    :config
+    (require 'cl-lib)
+    
+    (defmacro my/consult-source (name key &rest conds)
+      `(list :name ,name :narrow ,key :category 'buffer :face 'consult-buffer
+             :history 'buffer-name-history :state #'consult--buffer-state
+             :items (lambda () (mapcar #'buffer-name
+               (cl-remove-if-not (lambda (b) (with-current-buffer b (and (not (string-prefix-p " " (buffer-name b))) ,@conds)))
+                                 (buffer-list))))))
+
+    (setq my/consult-source-vterm  (my/consult-source "Vterm"  ?v (derived-mode-p 'vterm-mode)))
+    (setq my/consult-source-org    (my/consult-source "Org"    ?o (derived-mode-p 'org-mode)))
+    (setq my/consult-source-buffer (my/consult-source "Buffer" ?b (not (or (derived-mode-p 'vterm-mode) (derived-mode-p 'org-mode)))))
+
+    (setq consult-buffer-sources (delq 'consult--source-buffer consult-buffer-sources))
+    (add-to-list 'consult-buffer-sources 'my/consult-source-buffer)
+    (add-to-list 'consult-buffer-sources 'my/consult-source-org)
+    (add-to-list 'consult-buffer-sources 'my/consult-source-vterm))
+#+end_src
+
+* Org Mode: Base, Babel ed Estetica Viva
+Esecuzione di codice diretta nelle note ed evidenziatori testuali dinamici.
+
+#+begin_src emacs-lisp
+  (use-package org
+    :custom
+    (org-hide-emphasis-markers t)
+    (org-ellipsis " ▾")
+    (org-startup-indented t)
+    (org-confirm-babel-evaluate nil)
+    :config
+    (let ((warning-minimum-level :error))
+      (require 'org-tempo))
+
+    (org-babel-do-load-languages
+     'org-babel-load-languages
+     '((emacs-lisp . t) (python . t) (C . t) (shell . t)))
+
+    ;; Riprogrammiamo i colori per l'evidenziatore
+    (setq org-emphasis-alist
+          '(("*" (:foreground "#ff6c6b" :weight bold))         ;; Rosso chiaro
+            ("/" (:foreground "#98be65" :slant italic))        ;; Verde
+            ("_" (:foreground "#da8548" :underline t))         ;; Arancione
+            ("=" (:background "yellow" :foreground "black"))   ;; Sfondo Giallo
+            ("~" (:foreground "#51afef"))                      ;; Azzurro
+            ("+" (:strike-through t :foreground "#5B6268"))))) ;; Barrato grigio
+
+  ;; UI Moderna per Org-mode
+  (use-package org-modern
+    :hook (org-mode . org-modern-mode)
+    :custom
+    (org-modern-star '("◉" "○" "◈" "◇" "✳"))
+    (org-modern-list '((43 . "➤") (45 . "–") (42 . "•")))
+    (org-modern-hide-stars nil) 
+    (org-modern-table nil))
+
+  ;; Rivela i marcatori testuali on-hover
+  (use-package org-appear
+    :hook (org-mode . org-appear-mode)
+    :custom
+    (org-appear-autoemphasis t)
+    (org-appear-autolinks t))
+
+  ;; Auto-generazione TOC
+  (use-package toc-org :hook (org-mode . toc-org-mode))
+
+  ;; Esportatori per CTF Report
+  (use-package ox-gfm)
+  (use-package ox-qmd)
+#+end_src
+
+* Terminali ed Emulatori (Vterm & Multi-Vterm)
+Gestione di shell veloci, isolate e multi-pannello.
+
+#+begin_src emacs-lisp
+  (use-package vterm
+    :commands vterm
+    :config
+    (setq vterm-max-scrollback 10000))
+
+  (use-package vterm-toggle
+    :bind (("C-c t" . vterm-toggle)
+           ("C-c T" . vterm-toggle-cd))
+    :config
+    (setq vterm-toggle-fullscreen-p nil)
+    (add-to-list 'display-buffer-alist
+                 '((lambda (buf-name _) (with-current-buffer buf-name (eq major-mode 'vterm-mode)))
+                    (display-buffer-reuse-window display-buffer-at-bottom)
+                    (reusable-frames . visible)
+                    (window-height . 0.3))))
+
+  (use-package multi-vterm
+    :bind (("C-c v c" . multi-vterm)
+           ("C-c v 3" . my/vterm-split-right)
+           ("C-c v 2" . my/vterm-split-below))
+    :config
+    (defun my/vterm-split-right ()
+      (interactive) (split-window-right) (other-window 1) (multi-vterm))
+    (defun my/vterm-split-below ()
+      (interactive) (split-window-below) (other-window 1) (multi-vterm)))
+#+end_src
+
+* Coding, Exploit Dev e WAPT
+Integrazione LSP, Snippet e Client HTTP per test rapidi.
+
+#+begin_src emacs-lisp
+  ;; Autocompletamento popup
+  (use-package corfu
+    :custom
+    (corfu-auto t)
+    (corfu-quit-no-match t)
+    :init
+    (global-corfu-mode))
+
+  ;; Analisi sintattica per C e Python (Emacs 29+)
+  (use-package eglot
+    :ensure nil
+    :hook ((c-mode . eglot-ensure)
+           (python-mode . eglot-ensure)))
+
+  ;; Boilerplate
+  (use-package yasnippet :config (yas-global-mode 1))
+  (use-package yasnippet-snippets)
+
+  ;; Client REST/HTTP testuale
+  (use-package restclient
+    :mode (("\\.http\\'" . restclient-mode)
+           ("\\.rest\\'" . restclient-mode)))
+#+end_src
+
+* Doom Modeline
+La barra di stato pulita e ricca di informazioni.
+
+#+begin_src emacs-lisp
+  (use-package doom-modeline
+    :init (doom-modeline-mode 1)
+    :custom
+    (doom-modeline-height 25)
+    (doom-modeline-bar-width 4)
+    (doom-modeline-icon t)
+    (doom-modeline-major-mode-icon t)
+    (doom-modeline-buffer-file-name-style 'truncate-with-project)
+    (doom-modeline-vterm-state t))
+#+end_src
