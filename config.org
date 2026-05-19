@@ -1,29 +1,43 @@
-#+TITLE: EmacsConfiguration
+#+TITLE: Emacs Configuration
 #+AUTHOR: Nicolò
 #+PROPERTY: header-args:emacs-lisp :tangle yes
 
-* Setup Iniziale ed Estetica Grafica
-Interfaccia pulita stile power-user: via fronzoli, schermo vuoto all'avvio, tema scuro e icone.
+* Package Management
+Bootstrapping di `use-package` e rimozione della schermata di avvio.
 
 #+begin_src emacs-lisp
-  ;; Interfaccia minimale
-  (menu-bar-mode -1)
-  (tool-bar-mode -1)
-  (scroll-bar-mode -1)
+  (setq inhibit-startup-message t
+        initial-scratch-message ""
+        initial-buffer-choice t)
 
-  ;; Avvio professionale a schermo vuoto
-  (setq inhibit-startup-message t)
-  (setq initial-scratch-message "")
-  (setq initial-buffer-choice t)
-
-  ;; Setup package manager
   (unless (package-installed-p 'use-package)
     (package-refresh-contents)
     (package-install 'use-package))
   (require 'use-package)
   (setq use-package-always-ensure t)
+#+end_src
 
-  ;; Tema scuro Doom e font Iosevka
+* Impostazioni di Base
+Pulizia dell'interfaccia e isolamento dei file temporanei.
+
+#+begin_src emacs-lisp
+  (menu-bar-mode -1)
+  (tool-bar-mode -1)
+  (scroll-bar-mode -1)
+
+  (setq use-short-answers t)
+  (global-auto-revert-mode 1)
+
+  ;; File temporanei e di backup centralizzati
+  (setq backup-directory-alist `(("." . ,(expand-file-name "saves/backups/" user-emacs-directory)))
+        auto-save-file-name-transforms `((".*" ,(expand-file-name "saves/auto-saves/" user-emacs-directory) t))
+        create-lockfiles nil)
+#+end_src
+
+* Aspetto e Interfaccia
+Tema, font, icone, modeline e feedback visivi.
+
+#+begin_src emacs-lisp
   (use-package doom-themes
     :config
     (load-theme 'doom-one t)
@@ -37,37 +51,22 @@ Interfaccia pulita stile power-user: via fronzoli, schermo vuoto all'avvio, tema
   (when (member "Iosevka Term" (font-family-list))
     (set-face-attribute 'fixed-pitch nil :font "Iosevka Term" :height 120))
 
-  ;; Icone universali (Richiede M-x nerd-icons-install-fonts)
   (use-package nerd-icons
     :custom
     (nerd-icons-font-family "Symbols Nerd Font Mono"))
-#+end_src
 
-* Comportamento di Sistema ed Helper Visivi
-Centralizzazione dei file temporanei, tracking del cursore e scorciatoie essenziali.
+  (use-package doom-modeline
+    :init (doom-modeline-mode 1)
+    :custom
+    (doom-modeline-height 25)
+    (doom-modeline-bar-width 4)
+    (doom-modeline-icon t)
+    (doom-modeline-major-mode-icon t)
+    (doom-modeline-buffer-file-name-style 'truncate-with-project)
+    (doom-modeline-vterm-state t))
 
-#+begin_src emacs-lisp
-  (setq use-short-answers t)
-  (global-auto-revert-mode 1)
-
-  ;; Isola i file temporanei (~ e #) per non sporcare le cartelle del progetto
-  (setq backup-directory-alist `(("." . ,(expand-file-name "saves/backups/" user-emacs-directory))))
-  (setq auto-save-file-name-transforms `((".*" ,(expand-file-name "saves/auto-saves/" user-emacs-directory) t)))
-  (setq create-lockfiles nil)
-
-  ;; Scorciatoia rapida per rinominare il buffer corrente (es. Vterm)
-  (global-set-key (kbd "C-c r") 'rename-buffer)
-
-  ;; Suggeritore di comandi
-  (use-package which-key
-    :init (which-key-mode)
-    :config
-    (setq which-key-idle-delay 0.5))
-
-  ;; Flash minimale sul cursore
   (use-package beacon
-    :init
-    (beacon-mode 1)
+    :init (beacon-mode 1)
     :custom
     (beacon-color "#ECBE7B")
     (beacon-size 15)
@@ -76,29 +75,33 @@ Centralizzazione dei file temporanei, tracking del cursore e scorciatoie essenzi
     (beacon-blink-when-window-scrolls t))
 #+end_src
 
-* Navigazione e Buffer Management
-Stack definitivo: Vertico (UI), Orderless (Motore di ricerca) e Consult (Comandi avanzati con segmentazione dei buffer).
+* Minibuffer e Navigazione
+Framework di ricerca, completamento e gestione buffer.
 
 #+begin_src emacs-lisp
-  ;; Interfaccia verticale, ciclica e persistenza cronologia
-  (use-package vertico :init (vertico-mode 1) (setq vertico-cycle t))
-  (use-package savehist :ensure nil :init (savehist-mode 1))
-  (use-package marginalia :init (marginalia-mode 1))
+  (use-package vertico
+    :init (vertico-mode 1)
+    :custom (vertico-cycle t))
 
-  ;; Motore di ricerca intelligente (ignora ordine e regex complessi)
+  (use-package savehist
+    :ensure nil
+    :init (savehist-mode 1))
+
+  (use-package marginalia
+    :init (marginalia-mode 1))
+
   (use-package orderless
-    :init
-    (setq completion-styles '(orderless basic)
-          completion-category-defaults nil
-          completion-category-overrides '((file (styles partial-completion)))))
+    :custom
+    (completion-styles '(orderless basic))
+    (completion-category-defaults nil)
+    (completion-category-overrides '((file (styles partial-completion)))))
 
-  ;; Comandi avanzati: ricerca inter-file e buffer management segmentato
   (use-package consult
     :bind (("C-x b" . consult-buffer)
            ("C-s"   . consult-line)
            ("C-c s" . consult-ripgrep))
-    :init
-    (setq isearch-invisible 'open)
+    :custom
+    (isearch-invisible 'open)
     :config
     (require 'cl-lib)
     
@@ -109,18 +112,23 @@ Stack definitivo: Vertico (UI), Orderless (Motore di ricerca) e Consult (Comandi
                (cl-remove-if-not (lambda (b) (with-current-buffer b (and (not (string-prefix-p " " (buffer-name b))) ,@conds)))
                                  (buffer-list))))))
 
-    (setq my/consult-source-vterm  (my/consult-source "Vterm"  ?v (derived-mode-p 'vterm-mode)))
-    (setq my/consult-source-org    (my/consult-source "Org"    ?o (derived-mode-p 'org-mode)))
-    (setq my/consult-source-buffer (my/consult-source "Buffer" ?b (not (or (derived-mode-p 'vterm-mode) (derived-mode-p 'org-mode)))))
+    ;; Utilizzo defvar per inizializzazione sicura
+    (defvar my/consult-source-vterm  (my/consult-source "Vterm"  ?v (derived-mode-p 'vterm-mode)))
+    (defvar my/consult-source-org    (my/consult-source "Org"    ?o (derived-mode-p 'org-mode)))
+    (defvar my/consult-source-buffer (my/consult-source "Buffer" ?b (not (or (derived-mode-p 'vterm-mode) (derived-mode-p 'org-mode)))))
 
     (setq consult-buffer-sources (delq 'consult--source-buffer consult-buffer-sources))
-    (add-to-list 'consult-buffer-sources 'my/consult-source-buffer)
-    (add-to-list 'consult-buffer-sources 'my/consult-source-org)
-    (add-to-list 'consult-buffer-sources 'my/consult-source-vterm))
+    (add-to-list 'consult-buffer-sources 'my/consult-source-buffer t)
+    (add-to-list 'consult-buffer-sources 'my/consult-source-org t)
+    (add-to-list 'consult-buffer-sources 'my/consult-source-vterm t))
+
+  (use-package which-key
+    :init (which-key-mode)
+    :custom (which-key-idle-delay 0.5))
 #+end_src
 
-* Org Mode: Base, Babel ed Estetica Viva
-Esecuzione di codice diretta nelle note ed evidenziatori testuali dinamici.
+* Org Mode e Docs-as-Code
+Setup per esecuzione codice, reportistica ed estetica.
 
 #+begin_src emacs-lisp
   (use-package org
@@ -129,24 +137,19 @@ Esecuzione di codice diretta nelle note ed evidenziatori testuali dinamici.
     (org-ellipsis " ▾")
     (org-startup-indented t)
     (org-confirm-babel-evaluate nil)
+    (org-emphasis-alist
+     '(("*" (:foreground "#ff6c6b" :weight bold))
+       ("/" (:foreground "#98be65" :slant italic))
+       ("_" (:foreground "#da8548" :underline t))
+       ("=" (:background "yellow" :foreground "black"))
+       ("~" (:foreground "#51afef"))
+       ("+" (:strike-through t :foreground "#5B6268"))))
     :config
-    (let ((warning-minimum-level :error))
-      (require 'org-tempo))
-
+    (require 'org-tempo)
     (org-babel-do-load-languages
      'org-babel-load-languages
-     '((emacs-lisp . t) (python . t) (C . t) (shell . t)))
+     '((emacs-lisp . t) (python . t) (C . t) (shell . t))))
 
-    ;; Riprogrammiamo i colori per l'evidenziatore
-    (setq org-emphasis-alist
-          '(("*" (:foreground "#ff6c6b" :weight bold))         ;; Rosso chiaro
-            ("/" (:foreground "#98be65" :slant italic))        ;; Verde
-            ("_" (:foreground "#da8548" :underline t))         ;; Arancione
-            ("=" (:background "yellow" :foreground "black"))   ;; Sfondo Giallo
-            ("~" (:foreground "#51afef"))                      ;; Azzurro
-            ("+" (:strike-through t :foreground "#5B6268"))))) ;; Barrato grigio
-
-  ;; UI Moderna per Org-mode
   (use-package org-modern
     :hook (org-mode . org-modern-mode)
     :custom
@@ -155,35 +158,68 @@ Esecuzione di codice diretta nelle note ed evidenziatori testuali dinamici.
     (org-modern-hide-stars nil) 
     (org-modern-table nil))
 
-  ;; Rivela i marcatori testuali on-hover
   (use-package org-appear
     :hook (org-mode . org-appear-mode)
     :custom
     (org-appear-autoemphasis t)
     (org-appear-autolinks t))
 
-  ;; Auto-generazione TOC
-  (use-package toc-org :hook (org-mode . toc-org-mode))
+  (use-package toc-org 
+    :hook (org-mode . toc-org-mode))
 
-  ;; Esportatori per CTF Report
+  ;; Moduli di esportazione
   (use-package ox-gfm)
   (use-package ox-qmd)
 #+end_src
 
-* Terminali ed Emulatori (Vterm & Multi-Vterm)
-Gestione di shell veloci, isolate e multi-pannello.
+* Sviluppo
+LSP, autocompletamento, snippet, tool per test di rete e versioning.
+
+#+begin_src emacs-lisp
+  (use-package corfu
+    :init (global-corfu-mode)
+    :custom
+    (corfu-auto t)
+    (corfu-quit-no-match t))
+
+  (use-package eglot
+    :ensure nil
+    :hook ((c-mode . eglot-ensure)
+           (python-mode . eglot-ensure)))
+
+  (use-package yasnippet 
+    :config (yas-global-mode 1))
+  
+  (use-package yasnippet-snippets)
+
+  (use-package restclient
+    :mode (("\\.http\\'" . restclient-mode)
+           ("\\.rest\\'" . restclient-mode)))
+
+  ;; L'interfaccia Git definitiva per Emacs
+  (use-package magit
+    :bind (("C-x g" . magit-status)
+           ("C-c g b" . magit-blame))
+    :custom
+    ;; Forza l'apertura dello status nella finestra corrente
+    (magit-display-buffer-function #'magit-display-buffer-same-window-except-diff-v1)
+    ;; Disabilita il salvataggio automatico dei buffer all'avvio per maggiore controllo
+    (magit-save-repository-buffers nil))
+#+end_src
+
+* Terminale (Vterm)
+Emulatori, tiling e helper generali dei buffer.
 
 #+begin_src emacs-lisp
   (use-package vterm
     :commands vterm
-    :config
-    (setq vterm-max-scrollback 10000))
+    :custom (vterm-max-scrollback 10000))
 
   (use-package vterm-toggle
     :bind (("C-c t" . vterm-toggle)
            ("C-c T" . vterm-toggle-cd))
+    :custom (vterm-toggle-fullscreen-p nil)
     :config
-    (setq vterm-toggle-fullscreen-p nil)
     (add-to-list 'display-buffer-alist
                  '((lambda (buf-name _) (with-current-buffer buf-name (eq major-mode 'vterm-mode)))
                     (display-buffer-reuse-window display-buffer-at-bottom)
@@ -199,47 +235,7 @@ Gestione di shell veloci, isolate e multi-pannello.
       (interactive) (split-window-right) (other-window 1) (multi-vterm))
     (defun my/vterm-split-below ()
       (interactive) (split-window-below) (other-window 1) (multi-vterm)))
-#+end_src
 
-* Coding, Exploit Dev e WAPT
-Integrazione LSP, Snippet e Client HTTP per test rapidi.
-
-#+begin_src emacs-lisp
-  ;; Autocompletamento popup
-  (use-package corfu
-    :custom
-    (corfu-auto t)
-    (corfu-quit-no-match t)
-    :init
-    (global-corfu-mode))
-
-  ;; Analisi sintattica per C e Python (Emacs 29+)
-  (use-package eglot
-    :ensure nil
-    :hook ((c-mode . eglot-ensure)
-           (python-mode . eglot-ensure)))
-
-  ;; Boilerplate
-  (use-package yasnippet :config (yas-global-mode 1))
-  (use-package yasnippet-snippets)
-
-  ;; Client REST/HTTP testuale
-  (use-package restclient
-    :mode (("\\.http\\'" . restclient-mode)
-           ("\\.rest\\'" . restclient-mode)))
-#+end_src
-
-* Doom Modeline
-La barra di stato pulita e ricca di informazioni.
-
-#+begin_src emacs-lisp
-  (use-package doom-modeline
-    :init (doom-modeline-mode 1)
-    :custom
-    (doom-modeline-height 25)
-    (doom-modeline-bar-width 4)
-    (doom-modeline-icon t)
-    (doom-modeline-major-mode-icon t)
-    (doom-modeline-buffer-file-name-style 'truncate-with-project)
-    (doom-modeline-vterm-state t))
+  ;; Utility per rinominare sessioni attive al volo
+  (global-set-key (kbd "C-c r") 'rename-buffer)
 #+end_src
