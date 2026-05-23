@@ -114,21 +114,215 @@ Babel attivo per: `emacs-lisp`, `python`, `C`, `shell`.
 | [vterm-toggle](https://github.com/jixiuf/vterm-toggle) | Toggle terminale fisso in basso (30% altezza) |
 | [multi-vterm](https://github.com/suonlight/multi-vterm) | Sessioni vterm multiple |
 
-## Keybindings principali
+## Keybindings
+
+### Navigazione e ricerca
+
+| Bind | Comando | Note |
+|---|---|---|
+| `C-x b` | `consult-buffer` | Switcher buffer con preview live |
+| `C-s` | `consult-line` | Ricerca nel buffer corrente con preview |
+| `C-c s` | `consult-ripgrep` | Ripgrep nel progetto con preview |
+| `C-.` | `embark-act` | Menu azioni contestuale sull'oggetto sotto il cursore |
+| `C-;` | `embark-dwim` | Azione principale senza aprire il menu |
+| `C-h B` | `embark-bindings` | Mostra tutti i bind attivi nel contesto corrente |
+| `C-n` / `C-p` | vertico: candidato successivo/precedente | Anche frecce |
+| `M-A` | marginalia: cicla livello annotazioni | Più/meno dettaglio nei candidati |
+
+### Editing in wgrep
 
 | Bind | Comando |
 |---|---|
-| `C-x b` | `consult-buffer` — switcher buffer |
-| `C-s` | `consult-line` — ricerca live nel buffer |
-| `C-c s` | `consult-ripgrep` — ricerca nel progetto |
-| `C-.` | `embark-act` — menu azioni contestuale |
-| `C-;` | `embark-dwim` — azione principale senza menu |
-| `C-x g` | `magit-status` |
-| `C-c g b` | `magit-blame` |
-| `C-c t` | `vterm-toggle` |
-| `C-c T` | `vterm-toggle-cd` — terminale nella dir corrente |
-| `C-c v c` | `multi-vterm` — nuova sessione terminale |
-| `C-c r` | `rename-buffer` |
+| `C-c C-p` | Rende il buffer grep modificabile |
+| `C-c C-c` | Salva tutte le modifiche nei file originali |
+| `C-c C-k` | Annulla tutte le modifiche in sospeso |
+| `C-c C-d` | Marca una riga per la cancellazione |
+
+### Completamento (corfu)
+
+| Bind | Azione |
+|---|---|
+| `TAB` / `M-TAB` | Completa o cicla tra i candidati |
+| `RET` | Accetta il candidato selezionato |
+| `ESC` / `C-g` | Chiude il popup |
+| `M-n` / `M-p` | Scorre la documentazione inline del candidato |
+| `M-.` | Vai alla definizione dal popup |
+| `C-h` | Mostra documentazione del candidato |
+
+### LSP / eglot
+
+| Bind | Comando | Note |
+|---|---|---|
+| `M-.` | `xref-find-definitions` | Vai alla definizione |
+| `M-,` | `xref-pop-marker-stack` | Torna alla posizione precedente |
+| `M-?` | `xref-find-references` | Trova tutti i riferimenti |
+| `C-c C-r` | `eglot-rename` | Rinomina simbolo in tutto il progetto |
+| `C-c C-a` | `eglot-code-actions` | Azioni LSP contestuali (import, fix, ecc.) |
+| `C-c C-f` | `eglot-format` | Formatta buffer o regione selezionata |
+| `M-n` / `M-p` | `flymake-goto-next/prev-error` | Naviga tra i diagnostics |
+
+### Yasnippet
+
+| Bind | Azione |
+|---|---|
+| `TAB` | Espandi snippet o salta al campo successivo |
+| `S-TAB` | Torna al campo precedente |
+| `M-x yas-describe-tables` | Elenca tutti gli snippet del major-mode corrente |
+
+### Org Mode
+
+| Bind | Azione |
+|---|---|
+| `TAB` | Cicla visibilità heading: chiuso → figli → tutto |
+| `S-TAB` | Cicla visibilità globale dell'intero documento |
+| `M-RET` | Inserisce heading/item allo stesso livello |
+| `M-↑` / `M-↓` | Sposta heading su/giù tra i fratelli |
+| `M-←` / `M-→` | Promuovi/declassa heading di un livello |
+| `C-c C-c` | Esegui src block / aggiorna tabella / conferma |
+| `C-c '` | Apri src block in buffer dedicato con il major-mode del linguaggio |
+| `C-c C-e` | Menu di esportazione |
+| `C-c C-l` | Inserisci o modifica un link |
+| `C-c C-o` | Apri link sotto il cursore |
+| `C-c C-t` | Cicla stato TODO dell'heading |
+| `< s TAB` | Espandi template `#+begin_src` (org-tempo) |
+| `< e TAB` | Espandi template `#+begin_example` |
+| `< q TAB` | Espandi template `#+begin_quote` |
+
+### Magit
+
+`C-x g` apre il buffer status. Tutti i bind seguenti funzionano al suo interno.
+
+| Bind | Azione |
+|---|---|
+| `C-x g` | `magit-status` — apre il buffer principale |
+| `C-c g b` | `magit-blame` — blame inline riga per riga |
+| `TAB` | Espandi/collassa sezione o hunk |
+| `s` / `u` | Stage / unstage file o hunk |
+| `c c` | Commit (apre buffer per il messaggio, `C-c C-c` per confermare) |
+| `P p` | Push al remote corrente |
+| `F p` | Pull dal remote corrente |
+| `b b` | Cambia branch con completamento |
+| `b c` | Crea nuovo branch |
+| `l l` | Log del branch corrente |
+| `d d` | Diff del file o hunk sotto il cursore |
+| `z z` | Stash delle modifiche correnti |
+| `z p` | Pop dello stash |
+| `r i` | Rebase interattivo |
+| `?` | Help contestuale — mostra tutti i bind disponibili |
+| `q` | Chiudi il buffer magit corrente |
+
+### Terminale
+
+| Bind | Comando | Note |
+|---|---|---|
+| `C-c t` | `vterm-toggle` | Apri/chiudi terminale fisso in basso (30% altezza) |
+| `C-c T` | `vterm-toggle-cd` | Come sopra, nella directory del buffer corrente |
+| `C-c v c` | `multi-vterm` | Nuova sessione terminale indipendente |
+| `C-c r` | `rename-buffer` | Rinomina la sessione terminale corrente |
+| `C-c C-c` | Invia SIGINT al processo | Equivalente di `Ctrl+C` nel terminale |
+
+---
+
+## Workflow
+
+### Ricerca e modifica massiva su più file
+
+Il flusso più potente della configurazione — refactoring o rinomina di stringhe
+non gestita da LSP, aggiornamento di configurazioni, pulizia di log.
+
+```
+C-c s        →  consult-ripgrep: cerca il pattern nel progetto
+                (filtra con orderless mentre scrivi: "foo bar" cerca entrambi in ordine libero)
+C-. → E      →  embark-export: esporta i risultati in un buffer grep
+C-c C-p      →  wgrep: rende il buffer modificabile
+                (modifica le righe direttamente come in un file normale)
+C-c C-c      →  wgrep: salva tutte le modifiche nei file originali
+```
+
+### Sviluppo con LSP
+
+Ciclo tipico su un file Python o C con eglot attivo e language server installato.
+
+```
+M-.          →  vai alla definizione del simbolo sotto il cursore
+M-,          →  torna alla posizione precedente
+M-?          →  trova tutti i riferimenti nel progetto
+C-c C-a      →  apri le code actions (fix import mancante, genera stub, ecc.)
+C-c C-r      →  rinomina il simbolo in tutti i file del progetto
+C-c C-f      →  formatta il buffer con il formatter del language server
+M-n / M-p    →  naviga tra gli errori segnalati da flymake
+```
+
+### Commit Git
+
+```
+C-x g        →  magit-status: panoramica del repository
+TAB          →  espandi un hunk per vedere le modifiche nel dettaglio
+s            →  stage del file o del singolo hunk selezionato
+c c          →  apri buffer per il messaggio di commit
+C-c C-c      →  conferma il commit
+P p          →  push al remote
+```
+
+Per un rebase interattivo sugli ultimi N commit: da magit-status `r i`,
+poi seleziona il commit di base.
+
+### Testing API REST
+
+Crea un file con estensione `.http`, scrivi le richieste in formato leggibile.
+Ogni richiesta è separata da `###`.
+
+```http
+GET https://api.example.com/users
+Authorization: Bearer {{token}}
+
+###
+
+POST https://api.example.com/users
+Content-Type: application/json
+
+{"name": "Nicolò", "role": "admin"}
+```
+
+```
+C-c C-c      →  esegui la richiesta sotto il cursore
+                (la risposta appare in un buffer separato con syntax highlighting)
+C-c C-v      →  esegui senza spostarti dal file
+C-c n n      →  salta alla richiesta successiva
+```
+
+### Docs-as-code con Org e Babel
+
+Scrivi documentazione e codice nello stesso file `.org`. I src block sono
+eseguibili e il risultato può essere inserito automaticamente nel documento.
+
+```
+< s TAB      →  inserisci un src block con template
+C-c '        →  apri il src block in un buffer dedicato con il major-mode corretto
+                (chiudi con C-c C-c per tornare al file org)
+C-c C-c      →  esegui il src block e inserisci il risultato come #+RESULTS
+C-c C-e g g  →  esporta l'intero documento in GitHub Flavored Markdown
+C-c C-e h h  →  esporta in HTML
+```
+
+Il config stesso (`config.org`) usa questo approccio: viene tanglato in Elisp
+all'avvio tramite `org-babel-load-file` in `init.el`. Per modificare la
+configurazione basta editare `config.org` e riavviare Emacs.
+
+### Gestione sessioni terminale
+
+Workflow consigliato per progetti con più processi attivi contemporaneamente.
+
+```
+C-c t        →  apri il terminale principale in basso (server, watcher, ecc.)
+C-c v c      →  crea una seconda sessione per comandi veloci
+C-c r        →  rinomina le sessioni con nomi significativi ("backend", "db", ecc.)
+C-x b        →  consult-buffer: switcha tra sessioni
+                (il filtro avviene per nome, scrivi direttamente il nome della sessione)
+C-c T        →  apri un terminale direttamente nella directory del progetto corrente
+```
+
+---
 
 ## Note
 
