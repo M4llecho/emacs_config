@@ -1,24 +1,19 @@
-;; Inizializza il sistema di pacchetti di base
+;; Isola le variabili scritte da Custom in un file separato
+;; per evitare che sovrascriva il config scritto a mano
+(setq custom-file (expand-file-name "custom.el" user-emacs-directory))
+(when (file-exists-p custom-file) (load custom-file))
+
+;; Inizializza il sistema di pacchetti
 (require 'package)
 
-;; Aggiungi i vari repository
-(add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
-(add-to-list 'package-archives '("nongnu" . "https://elpa.nongnu.org/nongnu/") t)
-(add-to-list 'package-archives '("gnu" . "https://elpa.gnu.org/packages/") t)
+;; Repository: GNU (stabile), NonGNU (semi-stabile), MELPA (bleeding edge)
+(setq package-archives
+      '(("gnu"    . "https://elpa.gnu.org/packages/")
+        ("nongnu" . "https://elpa.nongnu.org/nongnu/")
+        ("melpa"  . "https://melpa.org/packages/")))
 
 (package-initialize)
 
-;; Carica ed esegue il tangle del file config.org
+;; Carica ed esegue il tangle di config.org
+;; Tutto il resto della configurazione sta lì
 (org-babel-load-file (expand-file-name "config.org" user-emacs-directory))
-(custom-set-variables
- ;; custom-set-variables was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- '(package-selected-packages nil))
-(custom-set-faces
- ;; custom-set-faces was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- )
