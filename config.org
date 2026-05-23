@@ -3,38 +3,65 @@
 #+PROPERTY: header-args:emacs-lisp :tangle yes
 
 * Package Management
-Bootstrapping di `use-package` e rimozione della schermata di avvio.
+Bootstrapping di =use-package= e pin di sicurezza per i pacchetti built-in.
 
 #+begin_src emacs-lisp
   (setq inhibit-startup-message t
         initial-scratch-message ""
         initial-buffer-choice t)
 
+  ;; Aggiorna l'indice dei pacchetti se è vuoto o non ancora caricato.
+  ;; Evita il 404 "package-X.tar: Not found" causato da un indice MELPA scaduto.
+  (unless package-archive-contents
+    (package-refresh-contents))
+
   (unless (package-installed-p 'use-package)
-    (package-refresh-contents)
     (package-install 'use-package))
+
   (require 'use-package)
   (setq use-package-always-ensure t)
 #+end_src
 
-* Impostazioni di Base
-Pulizia dell'interfaccia e isolamento dei file temporanei.
+* Core & Editing
+Built-in puri: nessuna dipendenza esterna, impattano ogni buffer.
 
 #+begin_src emacs-lisp
+  ;; UI minimale — idealmente da spostare in early-init.el
   (menu-bar-mode -1)
   (tool-bar-mode -1)
   (scroll-bar-mode -1)
 
+  ;; Comportamento generale
   (setq use-short-answers t)
   (global-auto-revert-mode 1)
+  (column-number-mode 1)
+  (delete-selection-mode 1)  ; digita sopra una regione selezionata per sostituirla
+
+  ;; Numeri di riga solo nei buffer di codice
+  (add-hook 'prog-mode-hook #'display-line-numbers-mode)
+
+  ;; Evidenzia la riga corrente nei buffer di codice e org
+  (add-hook 'prog-mode-hook #'hl-line-mode)
+  (add-hook 'org-mode-hook  #'hl-line-mode)
+
+  ;; Chiusura automatica parentesi/virgolette
+  (electric-pair-mode 1)
+
+  ;; Evidenzia la parentesi corrispondente
+  (show-paren-mode 1)
+  (setq show-paren-delay 0)
 
   ;; File temporanei e di backup centralizzati
+  ;; make-directory con t crea anche le directory intermedie se non esistono
+  (make-directory (expand-file-name "saves/backups/"    user-emacs-directory) t)
+  (make-directory (expand-file-name "saves/auto-saves/" user-emacs-directory) t)
+
   (setq backup-directory-alist `(("." . ,(expand-file-name "saves/backups/" user-emacs-directory)))
         auto-save-file-name-transforms `((".*" ,(expand-file-name "saves/auto-saves/" user-emacs-directory) t))
         create-lockfiles nil)
 #+end_src
 
-* Aspetto e Interfaccia
+* Aspetto & Interfaccia
 Tema, font, icone, modeline e feedback visivi.
 
 #+begin_src emacs-lisp
@@ -75,21 +102,27 @@ Tema, font, icone, modeline e feedback visivi.
     (beacon-blink-when-window-scrolls t))
 #+end_src
 
-* Minibuffer e Navigazione
-Framework di ricerca, completamento e gestione buffer.
+* Minibuffer & Completamento
+Tutto lo stack di ricerca, navigazione e completamento in un unico posto.
+=vertico= + =consult= + =embark= coprono la navigazione; =corfu= + =cape= il completamento inline.
+
+** Minibuffer: ricerca e navigazione
 
 #+begin_src emacs-lisp
   (use-package vertico
     :init (vertico-mode 1)
     :custom (vertico-cycle t))
 
+  ;; Persiste la history del minibuffer tra sessioni
   (use-package savehist
     :ensure nil
     :init (savehist-mode 1))
 
+  ;; Annotazioni contestuali accanto ai candidati (tipo file, docstring, ecc.)
   (use-package marginalia
     :init (marginalia-mode 1))
 
+  ;; Matching fuzzy per stile "parole separate da spazi"
   (use-package orderless
     :custom
     (completion-styles '(orderless basic))
@@ -101,79 +134,44 @@ Framework di ricerca, completamento e gestione buffer.
            ("C-s"   . consult-line)
            ("C-c s" . consult-ripgrep))
     :custom
-    (isearch-invisible 'open)
-    :config
-    (require 'cl-lib)
-    
-    (defmacro my/consult-source (name key &rest conds)
-      `(list :name ,name :narrow ,key :category 'buffer :face 'consult-buffer
-             :history 'buffer-name-history :state #'consult--buffer-state
-             :items (lambda () (mapcar #'buffer-name
-               (cl-remove-if-not (lambda (b) (with-current-buffer b (and (not (string-prefix-p " " (buffer-name b))) ,@conds)))
-                                 (buffer-list))))))
-
-    ;; Utilizzo defvar per inizializzazione sicura
-    (defvar my/consult-source-vterm  (my/consult-source "Vterm"  ?v (derived-mode-p 'vterm-mode)))
-    (defvar my/consult-source-org    (my/consult-source "Org"    ?o (derived-mode-p 'org-mode)))
-    (defvar my/consult-source-buffer (my/consult-source "Buffer" ?b (not (or (derived-mode-p 'vterm-mode) (derived-mode-p 'org-mode)))))
-
-    (setq consult-buffer-sources (delq 'consult--source-buffer consult-buffer-sources))
-    (add-to-list 'consult-buffer-sources 'my/consult-source-buffer t)
-    (add-to-list 'consult-buffer-sources 'my/consult-source-org t)
-    (add-to-list 'consult-buffer-sources 'my/consult-source-vterm t))
+    (isearch-invisible 'open))
 
   (use-package which-key
     :init (which-key-mode)
     :custom (which-key-idle-delay 0.5))
 #+end_src
 
-* Org Mode e Docs-as-Code
-Setup per esecuzione codice, reportistica ed estetica.
+** Embark — azioni contestuali
+
+=embark= aggiunge un layer di azioni su qualsiasi "cosa" sotto il cursore: candidati
+nel minibuffer, file, simboli, URL. =embark-consult= collega le due librerie e abilita
+=embark-export= sui risultati di consult (es. ripgrep → buffer grep modificabile con wgrep).
 
 #+begin_src emacs-lisp
-  (use-package org
+  ;; :pin gnu — il build MELPA di embark è attualmente rotto (tar 404).
+  ;; Entrambi i pacchetti sono disponibili anche su GNU ELPA, usiamo quella.
+  (use-package embark
+    :pin gnu
+    :bind (("C-."   . embark-act)      ; menu azioni contestuale
+           ("C-;"   . embark-dwim)     ; azione "ovvia" senza menu
+           ("C-h B" . embark-bindings)) ; mostra tutti i bind del contesto corrente
     :custom
-    (org-hide-emphasis-markers t)
-    (org-ellipsis " ▾")
-    (org-startup-indented t)
-    (org-confirm-babel-evaluate nil)
-    (org-emphasis-alist
-     '(("*" (:foreground "#ff6c6b" :weight bold))
-       ("/" (:foreground "#98be65" :slant italic))
-       ("_" (:foreground "#da8548" :underline t))
-       ("=" (:background "yellow" :foreground "black"))
-       ("~" (:foreground "#51afef"))
-       ("+" (:strike-through t :foreground "#5B6268"))))
-    :config
-    (require 'org-tempo)
-    (org-babel-do-load-languages
-     'org-babel-load-languages
-     '((emacs-lisp . t) (python . t) (C . t) (shell . t))))
+    (embark-help-key "?"))
 
-  (use-package org-modern
-    :hook (org-mode . org-modern-mode)
-    :custom
-    (org-modern-star '("◉" "○" "◈" "◇" "✳"))
-    (org-modern-list '((43 . "➤") (45 . "–") (42 . "•")))
-    (org-modern-hide-stars nil) 
-    (org-modern-table nil))
+  (use-package embark-consult
+    :pin gnu
+    :hook (embark-collect-mode . consult-preview-at-point-mode))
 
-  (use-package org-appear
-    :hook (org-mode . org-appear-mode)
-    :custom
-    (org-appear-autoemphasis t)
-    (org-appear-autolinks t))
-
-  (use-package toc-org 
-    :hook (org-mode . toc-org-mode))
-
-  ;; Moduli di esportazione
-  (use-package ox-gfm)
-  (use-package ox-qmd)
+  ;; wgrep: rende modificabile il buffer grep/ripgrep prodotto da embark-export
+  ;; Workflow: consult-ripgrep → C-. → E (export) → modifica → C-c C-c (salva tutto)
+  (use-package wgrep
+    :custom (wgrep-auto-save-buffer t))
 #+end_src
 
-* Sviluppo
-LSP, autocompletamento, snippet, tool per test di rete e versioning.
+** Corfu + Cape — completamento inline
+
+=corfu= gestisce il popup; =cape= fornisce i backend quando LSP non è attivo
+(testo, dabbrev, path di file, keyword del linguaggio corrente).
 
 #+begin_src emacs-lisp
   (use-package corfu
@@ -182,33 +180,121 @@ LSP, autocompletamento, snippet, tool per test di rete e versioning.
     (corfu-auto t)
     (corfu-quit-no-match t))
 
+  (use-package cape
+    :init
+    (add-hook 'completion-at-point-functions #'cape-dabbrev) ; parole già nel buffer
+    (add-hook 'completion-at-point-functions #'cape-file)    ; path dopo /
+    (add-hook 'completion-at-point-functions #'cape-keyword)) ; keyword del major-mode
+#+end_src
+
+* Org Mode
+Setup per docs-as-code, literate programming ed estetica.
+
+#+begin_src emacs-lisp
+  (use-package org
+    :custom
+    ;; Estetica
+    (org-hide-emphasis-markers t)
+    (org-ellipsis " ▾")
+    (org-startup-indented t)
+    (org-return-follows-link t)
+
+    ;; Babel
+    (org-confirm-babel-evaluate nil)
+
+    ;; Src block — indentazione e comportamento del buffer di editing
+    (org-src-tab-acts-natively t)        ; tab si comporta come nel major mode del linguaggio
+    (org-src-preserve-indentation t)     ; non aggiunge indentazione spuria al tangle
+    (org-edit-src-content-indentation 0) ; evita il doppio indento nel buffer C-c '
+    (org-src-window-setup 'current-window) ; C-c ' apre nella finestra corrente
+
+    ;; Enfasi personalizzata
+    (org-emphasis-alist
+     '(("*" (:foreground "#ff6c6b" :weight bold))
+       ("/" (:foreground "#98be65" :slant italic))
+       ("_" (:foreground "#da8548" :underline t))
+       ("=" (:background "yellow" :foreground "black"))
+       ("~" (:foreground "#51afef"))
+       ("+" (:strike-through t :foreground "#5B6268"))))
+
+    :config
+    (require 'org-tempo)
+    (org-babel-do-load-languages
+     'org-babel-load-languages
+     '((emacs-lisp . t) (python . t) (C . t) (shell . t))))
+
+  ;; Estetica moderna: bullets, liste, tabelle
+  (use-package org-modern
+    :hook (org-mode . org-modern-mode)
+    :custom
+    (org-modern-star '("◉" "○" "◈" "◇" "✳"))
+    (org-modern-list '((43 . "➤") (45 . "–") (42 . "•")))
+    (org-modern-hide-stars nil)
+    (org-modern-table nil))
+
+  ;; Mostra i marker di enfasi quando il cursore è sopra
+  (use-package org-appear
+    :hook (org-mode . org-appear-mode)
+    :custom
+    (org-appear-autoemphasis t)
+    (org-appear-autolinks t))
+
+  ;; TOC automatico aggiornato al salvataggio
+  (use-package toc-org
+    :hook (org-mode . toc-org-mode))
+
+  ;; Ambiente di scrittura centrato — margini laterali per leggibilità su schermi larghi
+  ;; :commands dichiara olivetti-mode come autoload al byte-compiler,
+  ;; eliminando il warning "reference to free variable 'olivetti-mode'"
+  (use-package olivetti
+    :commands olivetti-mode
+    :hook (org-mode . olivetti-mode)
+    :custom (olivetti-body-width 100))
+
+  ;; Exporter: GitHub Flavored Markdown e Qiita Markdown
+  (use-package ox-gfm)
+  (use-package ox-qmd)
+#+end_src
+
+* Sviluppo & LSP
+Tree-sitter, LSP, snippet, Git e tool di rete.
+
+#+begin_src emacs-lisp
+  ;; Tree-sitter: installa le grammar e rimappa automaticamente i major mode
+  ;; ai corrispettivi *-ts-mode per highlighting e indentazione più precisi (Emacs 29+)
+  (use-package treesit-auto
+    :config
+    (global-treesit-auto-mode))
+
   (use-package eglot
     :ensure nil
-    :hook ((c-mode . eglot-ensure)
-           (python-mode . eglot-ensure)))
+    :hook (;; Mode classici
+           (c-mode      . eglot-ensure)
+           (python-mode . eglot-ensure)
+           ;; Mode tree-sitter (attivi con treesit-auto)
+           (c-ts-mode      . eglot-ensure)
+           (python-ts-mode . eglot-ensure)))
 
-  (use-package yasnippet 
+  (use-package yasnippet
     :config (yas-global-mode 1))
-  
+
   (use-package yasnippet-snippets)
 
+  ;; Client HTTP per testing di API REST — attivo su file .http e .rest
   (use-package restclient
     :mode (("\\.http\\'" . restclient-mode)
            ("\\.rest\\'" . restclient-mode)))
 
-  ;; L'interfaccia Git definitiva per Emacs
   (use-package magit
-    :bind (("C-x g" . magit-status)
+    :bind (("C-x g"   . magit-status)
            ("C-c g b" . magit-blame))
     :custom
-    ;; Forza l'apertura dello status nella finestra corrente
     (magit-display-buffer-function #'magit-display-buffer-same-window-except-diff-v1)
-    ;; Disabilita il salvataggio automatico dei buffer all'avvio per maggiore controllo
     (magit-save-repository-buffers nil))
 #+end_src
 
 * Terminale (Vterm)
-Emulatori, tiling e helper generali dei buffer.
+Emulatori, tiling e utility di sessione.
 
 #+begin_src emacs-lisp
   (use-package vterm
@@ -221,21 +307,14 @@ Emulatori, tiling e helper generali dei buffer.
     :custom (vterm-toggle-fullscreen-p nil)
     :config
     (add-to-list 'display-buffer-alist
-                 '((lambda (buf-name _) (with-current-buffer buf-name (eq major-mode 'vterm-mode)))
-                    (display-buffer-reuse-window display-buffer-at-bottom)
-                    (reusable-frames . visible)
-                    (window-height . 0.3))))
+                 '((lambda (buf-name _)
+                     (with-current-buffer buf-name (eq major-mode 'vterm-mode)))
+                   (display-buffer-reuse-window display-buffer-at-bottom)
+                   (reusable-frames . visible)
+                   (window-height . 0.3))))
 
   (use-package multi-vterm
-    :bind (("C-c v c" . multi-vterm)
-           ("C-c v 3" . my/vterm-split-right)
-           ("C-c v 2" . my/vterm-split-below))
-    :config
-    (defun my/vterm-split-right ()
-      (interactive) (split-window-right) (other-window 1) (multi-vterm))
-    (defun my/vterm-split-below ()
-      (interactive) (split-window-below) (other-window 1) (multi-vterm)))
+    :bind ("C-c v c" . multi-vterm))
 
-  ;; Utility per rinominare sessioni attive al volo
   (global-set-key (kbd "C-c r") 'rename-buffer)
 #+end_src
